@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>實境解謎：線索拼圖互動 (16塊自訂圖版)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #2c3e50;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px 15px;
+      margin: 0;
+    }
+
+    h2 {
+      margin-bottom: 8px;
+      letter-spacing: 2px;
+    }
+
+    p {
+      margin-top: 0;
+      color: #bdc3c7;
+      font-size: 14px;
+    }
+
+    /* 控制列區塊 */
+    .controls {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .custom-file-upload, .btn {
+      background-color: #3498db;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      border: none;
+      transition: background-color 0.2s, transform 0.1s;
+      font-size: 14px;
+    }
+
+    .custom-file-upload:hover, .btn:hover {
+      background-color: #2980b9;
+    }
+
+    .btn:active, .custom-file-upload:active {
+      transform: scale(0.98);
+    }
+
+    .btn-reset {
+      background-color: #e67e22;
+    }
+
+    .btn-reset:hover {
+      background-color: #d35400;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    /* 遊戲主容器 */
+    .game-container {
+      display: flex;
+      gap: 30px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .panel-title {
+      font-size: 14px;
+      color: #ecf0f1;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    /* 4x4 拼圖目標放置區 (總寬高: 360px + gap + padding) */
+    .puzzle-board {
+      display: grid;
+      grid-template-columns: repeat(4, 90px);
+      grid-template-rows: repeat(4, 90px);
+      gap: 2px;
+      background-color: #1a252f;
+      padding: 8px;
+      border-radius: 8px;
+      box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.6), 0 8px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    .drop-zone {
+      width: 90px;
+      height: 90px;
+      border: 1px dashed #4a6278;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.2s, border-color 0.2s;
+      border-radius: 4px;
+    }
+
+    .drop-zone.drag-over {
+      background-color: rgba(52, 152, 219, 0.3);
+      border-color: #3498db;
+    }
+
+    /* 碎片存放區 */
+    .puzzle-pieces-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .puzzle-pieces {
+      display: grid;
+      grid-template-columns: repeat(4, 90px);
+      grid-template-rows: repeat(4, 90px);
+      gap: 8px;
+      padding: 8px;
+      background-color: rgba(26, 37, 47, 0.5);
+      border-radius: 8px;
+      min-width: 384px;
+      min-height: 384px;
+      align-content: start;
+    }
+
+    .puzzle-pieces.drag-over {
+      background-color: rgba(52, 152, 219, 0.15);
+    }
+
+    /* 拼圖塊樣式 */
+    .piece {
+      width: 90px;
+      height: 90px;
+      cursor: grab;
+      border-radius: 4px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+      user-select: none;
+      background-size: 360px 360px; /* 4 * 90px */
+      transition: transform 0.1s, opacity 0.2s;
+    }
+
+    .piece:active {
+      cursor: grabbing;
+      opacity: 0.7;
+    }
+
+    #message {
+      margin-top: 25px;
+      font-size: 20px;
+      font-weight: bold;
+      min-height: 30px;
+      text-align: center;
+      transition: color 0.3s;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>實境解謎：線索拼圖還原</h2>
+  <p>拖曳碎片至左側正確的位置，或點擊上傳按鈕使用你自己的圖片！</p>
+
+  <!-- 上傳與重置按鈕區 -->
+  <div class="controls">
+    <label class="custom-file-upload">
+      <input type="file" id="image-upload" accept="image/*">
+      📷 上傳新圖片
+    </label>
+    <button class="btn btn-reset" id="reset-btn">🔄 重新打散拼圖</button>
+  </div>
+
+  <div class="game-container">
+    <!-- 放置區 (目標區域) -->
+    <div>
+      <div class="panel-title">【 目標拼圖板 】</div>
+      <div class="puzzle-board" id="puzzle-board"></div>
+    </div>
+
+    <!-- 碎片區 -->
+    <div class="puzzle-pieces-wrapper">
+      <div class="panel-title">【 線索碎片區 】</div>
+      <div class="puzzle-pieces" id="pieces-container"></div>
+    </div>
+  </div>
+
+  <div id="message"></div>
+
+  <script>
+    const GRID_SIZE = 4; // 4x4
+    const PIECE_SIZE = 90; // 每塊 90px
+    const BOARD_SIZE = GRID_SIZE * PIECE_SIZE; // 360px
+
+    const puzzleBoard = document.getElementById('puzzle-board');
+    const piecesContainer = document.getElementById('pieces-container');
+    const imageUpload = document.getElementById('image-upload');
+    const resetBtn = document.getElementById('reset-btn');
+    const message = document.getElementById('message');
+
+    let currentImageUrl = '';
+
+    // 初始化：預設產生一張展示圖案
+    initDefaultImage();
+
+    // 1. 產生預設的 Canvas 圖案
+    function initDefaultImage() {
+      const canvas = document.createElement('canvas');
+      canvas.width = BOARD_SIZE;
+      canvas.height = BOARD_SIZE;
+      const ctx = canvas.getContext('2d');
+
+      // 繪製背景漸層
+      const grad = ctx.createLinearGradient(0, 0, BOARD_SIZE, BOARD_SIZE);
+      grad.addColorStop(0, '#e74c3c');
+      grad.addColorStop(0.5, '#f1c40f');
+      grad.addColorStop(1, '#9b59b6');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, BOARD_SIZE, BOARD_SIZE);
+
+      // 繪製一些解謎線索圖案與文字
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.beginPath();
+      ctx.arc(180, 180, 120, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 36px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('SECRET', BOARD_SIZE / 2, BOARD_SIZE / 2 - 25);
+      ctx.fillText('CODE: 8521', BOARD_SIZE / 2, BOARD_SIZE / 2 + 25);
+
+      currentImageUrl = canvas.toDataURL();
+      buildPuzzle();
+    }
+
+    // 2. 監聽圖片上傳
+    imageUpload.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          // 將上傳圖片轉至 360x360 canvas 確保比例符合拼圖
+          const canvas = document.createElement('canvas');
+          canvas.width = BOARD_SIZE;
+          canvas.height = BOARD_SIZE;
+          const ctx = canvas.getContext('2d');
+
+          // 保持居中裁切繪製 (Cover)
+          const scale = Math.max(BOARD_SIZE / img.width, BOARD_SIZE / img.height);
+          const x = (BOARD_SIZE - img.width * scale) / 2;
+          const y = (BOARD_SIZE - img.height * scale) / 2;
+          ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+
+          currentImageUrl = canvas.toDataURL();
+          buildPuzzle();
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // 3. 建立並洗牌拼圖
+    function buildPuzzle() {
+      puzzleBoard.innerHTML = '';
+      piecesContainer.innerHTML = '';
+      message.textContent = '';
+
+      // 建立 16 個目標放置區
+      for (let i = 1; i <= GRID_SIZE * GRID_SIZE; i++) {
+        const zone = document.createElement('div');
+        zone.classList.add('drop-zone');
+        zone.dataset.target = i;
+        setupDropZoneEvents(zone);
+        puzzleBoard.appendChild(zone);
+      }
+
+      // 建立 16 個拼圖碎片
+      const pieces = [];
+      for (let i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
+        const piece = document.createElement('div');
+        piece.classList.add('piece');
+        piece.setAttribute('draggable', 'true');
+        
+        const pieceId = i + 1;
+        piece.dataset.id = pieceId;
+
+        // 計算切割位置 (-X, -Y)
+        const row = Math.floor(i / GRID_SIZE);
+        const col = i % GRID_SIZE;
+        const bgX = -col * PIECE_SIZE;
+        const bgY = -row * PIECE_SIZE;
+
+        piece.style.backgroundImage = `url(${currentImageUrl})`;
+        piece.style.backgroundPosition = `${bgX}px ${bgY}px`;
+
+        setupPieceDragEvents(piece);
+        pieces.push(piece);
+      }
+
+      // 隨機打散碎片 (Fisher-Yates 洗牌演算法)
+      shuffleArray(pieces);
+
+      // 將打散後的碎片放入碎片區
+      pieces.forEach(piece => piecesContainer.appendChild(piece));
+
+      // 允許將碎片拖回碎片區域
+      setupPiecesContainerEvents();
+    }
+
+    // 4. 碎片拖曳事件設定
+    function setupPieceDragEvents(piece) {
+      piece.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', e.target.dataset.id);
+        setTimeout(() => e.target.style.opacity = '0.4', 0);
+      });
+
+      piece.addEventListener('dragend', (e) => {
+        e.target.style.opacity = '1';
+      });
+    }
+
+    // 5. 放置區拖曳事件設定
+    function setupDropZoneEvents(zone) {
+      zone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        zone.classList.add('drag-over');
+      });
+
+      zone.addEventListener('dragleave', () => {
+        zone.classList.remove('drag-over');
+      });
+
+      zone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        zone.classList.remove('drag-over');
+
+        const draggedId = e.dataTransfer.getData('text/plain');
+        const draggedElement = document.querySelector(`.piece[data-id="${draggedId}"]`);
+
+        // 如果該位置是空的，才允許放入
+        if (zone.children.length === 0 && draggedElement) {
+          zone.appendChild(draggedElement);
+          checkWinCondition();
+        }
+      });
+    }
+
+    // 允許將碎片拖回右側存放區
+    function setupPiecesContainerEvents() {
+      piecesContainer.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        piecesContainer.classList.add('drag-over');
+      });
+
+      piecesContainer.addEventListener('dragleave', () => {
+        piecesContainer.classList.remove('drag-over');
+      });
+
+      piecesContainer.addEventListener('drop', (e) => {
+        e.preventDefault();
+        piecesContainer.classList.remove('drag-over');
+        const draggedId = e.dataTransfer.getData('text/plain');
+        const draggedElement = document.querySelector(`.piece[data-id="${draggedId}"]`);
+        
+        if (draggedElement) {
+          piecesContainer.appendChild(draggedElement);
+          checkWinCondition();
+        }
+      });
+    }
+
+    // 6. 重置 / 打散按鈕點擊
+    resetBtn.addEventListener('click', () => {
+      buildPuzzle();
+    });
+
+    // 7. 檢查勝負條件
+    function checkWinCondition() {
+      const dropZones = document.querySelectorAll('.drop-zone');
+      let isWin = true;
+      let piecesPlaced = 0;
+
+      dropZones.forEach(zone => {
+        const piece = zone.firstElementChild;
+        if (piece) {
+          piecesPlaced++;
+          if (zone.dataset.target !== piece.dataset.id) {
+            isWin = false;
+          }
+        } else {
+          isWin = false;
+        }
+      });
+
+      if (piecesPlaced === GRID_SIZE * GRID_SIZE) {
+        if (isWin) {
+          message.textContent = "🎉 解謎成功！線索拼圖已完美還原！";
+          message.style.color = "#2ecc71";
+        } else {
+          message.textContent = "❌ 位置好像不太對，再仔細觀察一下圖案吧！";
+          message.style.color = "#e74c3c";
+        }
+      } else {
+        message.textContent = "";
+      }
+    }
+
+    // 洗牌函數
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+  </script>
+</body>
+</html>
